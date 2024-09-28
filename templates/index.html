@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>API Configuration</title>
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+    <script>
+        function updateSliderValue(id) {
+            var slider = document.getElementById(id);
+            var output = document.getElementById(id + "_value");
+            output.innerHTML = slider.value;
+        }
+
+        function toggleResourceSelection() {
+            var resourceSelection = document.getElementById('resource_selection').value;
+            if (resourceSelection === 'all') {
+                document.getElementById('all_types_slider').style.display = 'block';
+                document.getElementById('specific_types_sliders').style.display = 'none';
+            } else {
+                document.getElementById('all_types_slider').style.display = 'none';
+                document.getElementById('specific_types_sliders').style.display = 'block';
+            }
+        }
+
+        window.onload = function() {
+            document.getElementById('resource_selection').addEventListener('change', toggleResourceSelection);
+            toggleResourceSelection();
+
+            // Neue Funktion zum Aktualisieren der API-URL
+            function updateApiUrl() {
+                var apiSelect = document.getElementById('api');
+                var apiUrlElement = document.getElementById('api_url');
+                fetch('/get_api_url', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({api: apiSelect.value})
+                })
+                .then(response => response.json())
+                .then(data => {
+                    apiUrlElement.textContent = data.url;
+                });
+            }
+
+            // Event-Listener für API-Auswahl
+            document.getElementById('api').addEventListener('change', updateApiUrl);
+
+            // Initial API-URL setzen
+            updateApiUrl();
+
+            // Handle form submission
+            document.getElementById("configForm").onsubmit = function(event) {
+                event.preventDefault();  // Prevent the default form submission
+                const formData = new FormData(this);
+                
+                // Sammeln Sie die Werte der spezifischen Typ-Slider
+                const specificTypeCounts = {};
+                document.querySelectorAll('.specific-type-slider').forEach(slider => {
+                    specificTypeCounts[slider.id] = slider.value;
+                });
+                formData.append('specific_type_counts', JSON.stringify(specificTypeCounts));
+
+                fetch('/generate_assets', {
+                    method: 'POST',
+                    body: formData
+                })
+                .then(response => response.json())
+                .then(data => {
+                    document.getElementById('currentConfig').innerText = JSON.stringify(data.config, null, 2);
+                    document.getElementById('showAssetsButton').style.display = 'block';
+                    console.log(`Generated ${data.assets_count} assets`);  // Log the number of generated assets
+                })
+                .catch(error => console.error('Error:', error));
+            };
+
+            // Handle show assets button click
+            document.getElementById("showAssetsButton").onclick = function() {
+                fetch('/custom_api/v1')  // Ändern Sie dies zu '/custom_api/v1'
+                .then(response => response.json())
+                .then(data => {
+                    document.getElementById('generatedAssets').innerText = JSON.stringify(data, null, 2);
+                    console.log(`Retrieved ${data.length} assets`);  // Log the number of retrieved assets
+                })
+                .catch(error => console.error('Error:', error));
+            };
+        };
+    </script>
+</head>
+<body>
+    <div class="container">
+        <h1 class="mt-5">API Configuration</h1>
+        <form id="configForm" method="POST" action="/generate_assets">
+            <!-- API Selection -->
+            <div class="form-group">
+                <label for="api">Select API</label>
+                <select class="form-control" id="api" name="api">
+                    {% for api in available_apis %}
+                    <option value="{{ api }}">{{ api }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <!-- API URL Display -->
+            <div class="form-group">
+                <label>API URL:</label>
+                <p id="api_url"></p>
+            </div>
+
+            <!-- Authentication Type -->
+            <div class="form-group">
+                <label for="auth_type">Authentication Type</label>
+                <select class="form-control" id="auth_type" name="auth_type">
+                    <option value="token">Token</option>
+                    <option value="password">Password</option>
+                </select>
+            </div>
+
+            <!-- Credentials -->
+            <div class="form-group">
+                <label for="credentials">Credentials</label>
+                <input type="text" class="form-control" id="credentials" name="credentials" placeholder="Enter credentials" value="PasswordorToken">
+            </div>
+
+            <!-- Resource Selection -->
+            <div class="form-group">
+                <label for="resource_selection">Resource Selection</label>
+                <select class="form-control" id="resource_selection" name="resource_selection">
+                    <option value="all">All Types</option>
+                    <option value="specific">Specific Types</option>
+                </select>
+            </div>
+
+            <!-- Slider for All Types -->
+            <div id="all_types_slider" class="form-group" style="display: none;">
+                <label for="all_types_count">Number of Records for All Types: <span id="all_types_count_value">10</span></label>
+                <div class="slider-container">
+                    <input type="range" class="form-control-range" id="all_types_count" name="all_types_count" min="1" max="500" value="10" oninput="updateSliderValue('all_types_count')">
+                </div>
+            </div>
+
+            <!-- Specific Resource Types Selection -->
+            <div id="specific_types_sliders" class="form-group" style="display: none;">
+                <label for="resource_types">Resource Types</label>
+                <div id="resource_types_container">
+                    {% for asset_type in asset_types %}
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="{{ asset_type }}" name="resource_types" value="{{ asset_type }}">
+                        <label class="form-check-label" for="{{ asset_type }}">{{ asset_type }}</label>
+                        <input type="range" class="form-control-range specific-type-slider" id="{{ asset_type }}_count" name="{{ asset_type }}_count" min="1" max="100" value="10" oninput="updateSliderValue('{{ asset_type }}_count')">
+                        <span id="{{ asset_type }}_count_value">10</span>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <!-- Submit Button -->
+            <button type="submit" class="btn btn-primary">Save Configuration</button>
+        </form>
+        <hr>
+        <h2>Current Configuration</h2>
+        <pre id="currentConfig"></pre> <!-- This is where the current configuration will be displayed -->
+
+        <button id="showAssetsButton" class="btn btn-secondary mt-3" style="display: none;">Show Generated Assets</button>
+
+        <h2 class="mt-4">Generated Assets</h2>
+        <pre id="generatedAssets"></pre>
+    </div>
+</body>
+</html>
